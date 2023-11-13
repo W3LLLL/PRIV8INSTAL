@@ -114,6 +114,9 @@ random_string=$(uuidgen)
 mkdir "$random_string"
 mkdir /var/www/${domain}
 
+# Create and write the redirect script to index.php
+echo "<?php header('Location: https://www.wikipedia.org/'); exit();" | sudo tee /var/www/${domain}/index.php > /dev/null
+
 # Extract the software directly into the generated directory
 unzip OV6_ENCODE.zip -d "/var/www/${domain}/${random_string}"
 

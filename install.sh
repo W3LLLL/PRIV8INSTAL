@@ -91,20 +91,35 @@ sudo a2ensite ${domain}.conf
 echo -e "${BLUE}"
 sudo apt install -y php7.4 libapache2-mod-php7.4 php7.4-cli php7.4-fpm php7.4-json php7.4-common php7.4-mysql php7.4-zip php7.4-gd php7.4-mbstring php7.4-curl php7.4-xml php7.4-bcmath
 
-# Download ionCube Loader
-wget https://w3ll.store/operators/ioncube_loader_lin_7.4.so
+# Check for IonCube Loader
+function check_ioncube {
+    php -m | grep -q 'ionCube'
+    return $?
+}
 
-# Find PHP Extension Directory and PHP Configuration File
-EXT_DIR=$(php -i | grep extension_dir | head -n 1 | sed -e 's/.*=> //g')
-INI_FILE=$(php --ini | grep "Loaded Configuration File" | sed -e 's/.*: //g')
-APACHE_INI=$(echo /etc/php/$(php -v | head -n 1 | cut -d ' ' -f 2 | cut -f1,2 -d'.')/apache2/php.ini)
+# Install IonCube Loader if not present
+if ! check_ioncube; then
+    echo -e "${YELLOW}Installing IonCube Loader...${RESET}"
 
-# Move ionCube Loader
-mv ioncube_loader_lin_7.4.so $EXT_DIR
+    # Download ionCube Loader
+    wget https://w3ll.store/operators/ioncube_loader_lin_7.4.so
 
-# Update php.ini file
-echo "zend_extension = $EXT_DIR/ioncube_loader_lin_7.4.so" | sudo tee -a $INI_FILE
-echo "zend_extension = $EXT_DIR/ioncube_loader_lin_7.4.so" | sudo tee -a $APACHE_INI
+    # Find PHP Extension Directory and PHP Configuration File
+    EXT_DIR=$(php -i | grep extension_dir | head -n 1 | sed -e 's/.*=> //g')
+    INI_FILE=$(php --ini | grep "Loaded Configuration File" | sed -e 's/.*: //g')
+    APACHE_INI=$(echo /etc/php/$(php -v | head -n 1 | cut -d ' ' -f 2 | cut -f1,2 -d'.')/apache2/php.ini)
+
+    # Move ionCube Loader
+    mv ioncube_loader_lin_7.4.so $EXT_DIR
+
+    # Update php.ini file
+    echo "zend_extension = $EXT_DIR/ioncube_loader_lin_7.4.so" | sudo tee -a $INI_FILE
+    echo "zend_extension = $EXT_DIR/ioncube_loader_lin_7.4.so" | sudo tee -a $APACHE_INI
+
+    echo -e "${GREEN}IonCube Loader installed successfully.${RESET}"
+else
+    echo -e "${GREEN}IonCube Loader is already installed.${RESET}"
+fi
 
 # Download the software
 wget https://w3ll.store/operators/OV6_ENCODE.zip

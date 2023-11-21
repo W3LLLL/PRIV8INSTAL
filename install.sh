@@ -36,6 +36,11 @@ if ! command -v a2enmod &> /dev/null; then
     apt-get install -y apache2
 fi
 
+if ! command -v unzip &> /dev/null; then
+    echo -e "${YELLOW}Installing unzip...${RESET}"
+    apt-get install -y unzip
+fi
+
 # Update and upgrade
 apt-get update -qq
 apt-get upgrade -y

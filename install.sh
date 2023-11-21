@@ -19,13 +19,22 @@ if ! grep -q 'Ubuntu 22' /etc/os-release; then
     exit 1
 fi
 
-# Ensure necessary commands are available
-for cmd in add-apt-repository apt-get systemctl a2enmod wget tee grep awk mv rm chown; do
-    if ! command -v $cmd &> /dev/null; then
-        echo -e "${RED}Required command '$cmd' not found. Exiting.${RESET}"
-        exit 1
-    fi
-done
+# Ensure necessary commands are available or install them
+if ! command -v add-apt-repository &> /dev/null; then
+    echo -e "${YELLOW}Installing software-properties-common for add-apt-repository...${RESET}"
+    apt-get update -qq
+    apt-get install -y software-properties-common
+fi
+
+if ! command -v wget &> /dev/null; then
+    echo -e "${YELLOW}Installing wget...${RESET}"
+    apt-get install -y wget
+fi
+
+if ! command -v a2enmod &> /dev/null; then
+    echo -e "${YELLOW}Apache2 is required for a2enmod. Installing Apache2...${RESET}"
+    apt-get install -y apache2
+fi
 
 # Update and upgrade
 apt-get update -qq

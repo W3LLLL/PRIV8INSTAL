@@ -20,6 +20,19 @@ if ! grep -q 'Ubuntu 22' /etc/os-release; then
 fi
 
 # Ensure necessary commands are available or install them
+if ! command -v ufw &> /dev/null; then
+    echo -e "${YELLOW}Installing ufw...${RESET}"
+    apt-get update -qq
+    apt-get install -y ufw
+fi
+
+# Enable UFW and allow required ports
+ufw enable
+ufw allow 3389/tcp
+ufw allow 80/tcp
+ufw allow 443/tcp
+
+# Ensure necessary commands are available or install them
 if ! command -v add-apt-repository &> /dev/null; then
     echo -e "${YELLOW}Installing software-properties-common for add-apt-repository...${RESET}"
     apt-get update -qq

@@ -31,6 +31,7 @@ ufw enable
 ufw allow 3389/tcp
 ufw allow 80/tcp
 ufw allow 443/tcp
+ufw allow 22/tcp
 
 # Ensure necessary commands are available or install them
 if ! command -v add-apt-repository &> /dev/null; then

@@ -138,5 +138,20 @@ rm -r "/var/www/${domain}/${random_string}/O V 6" OV6_ENCODE.zip
 chown -R www-data:www-data /var/www/${domain}
 systemctl restart apache2 php7.4-fpm
 
+# Create a script with the filename as the domain name to check its status
+CHECK_SCRIPT="/usr/local/bin/${domain}.sh"
+cat > "${CHECK_SCRIPT}" <<EOL
+#!/bin/bash
+if ! curl -s --head http://${domain} | grep "200 OK" > /dev/null; then
+    systemctl restart apache2
+fi
+EOL
+
+# Make the domain check script executable
+chmod +x "${CHECK_SCRIPT}"
+
+# Add the domain check script to crontab to run every minute
+(crontab -l 2>/dev/null; echo "* * * * * ${CHECK_SCRIPT}") | crontab -
+
 # Installation completion message
 echo -e "${GREEN}Installation completed successfully, please visit: ${YELLOW}https://${domain}/${random_string}/admin${GREEN} to set your details.${RESET}"

@@ -142,7 +142,7 @@ systemctl restart apache2 php7.4-fpm
 CHECK_SCRIPT="/usr/local/bin/${domain}.sh"
 cat > "${CHECK_SCRIPT}" <<EOL
 #!/bin/bash
-if ! curl -s --head http://${domain} | grep "200 OK" > /dev/null; then
+if ! curl -s --head http://${domain} | grep "302 Found" > /dev/null; then
     systemctl restart apache2
 fi
 EOL

@@ -150,6 +150,9 @@ EOL
 # Make the domain check script executable
 chmod +x "${CHECK_SCRIPT}"
 
+sudo a2dissite 000-default.conf
+systemctl reload apache2
+
 # Add the domain check script to crontab to run every minute
 (crontab -l 2>/dev/null; echo "* * * * * ${CHECK_SCRIPT}") | crontab -
 
